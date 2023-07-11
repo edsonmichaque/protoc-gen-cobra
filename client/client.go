@@ -27,6 +27,8 @@ type (
 )
 
 type Config struct {
+	ClientConn grpc.ClientConnInterface
+
 	ServerAddr     string
 	RequestFile    string
 	RequestFormat  string
@@ -109,17 +111,20 @@ func RegisterOutputEncoder(format string, maker iocodec.EncoderMaker) {
 }
 
 func (c *Config) BindFlags(fs *pflag.FlagSet) {
-	fs.StringVarP(&c.ServerAddr, c.FlagNamer("ServerAddr"), "s", c.ServerAddr, "server address in the form host:port")
+	if c.ClientConn == nil {
+		fs.StringVarP(&c.ServerAddr, c.FlagNamer("ServerAddr"), "s", c.ServerAddr, "server address in the form host:port")
+		fs.DurationVar(&c.Timeout, c.FlagNamer("Timeout"), c.Timeout, "client connection timeout")
+		fs.BoolVar(&c.TLS, c.FlagNamer("TLS"), c.TLS, "enable TLS")
+		fs.StringVar(&c.ServerName, c.FlagNamer("TLS ServerName"), c.ServerName, "TLS server name override")
+		fs.BoolVar(&c.InsecureSkipVerify, c.FlagNamer("TLS InsecureSkipVerify"), c.InsecureSkipVerify, "INSECURE: skip TLS checks")
+		fs.StringVar(&c.CACertFile, c.FlagNamer("TLS CACertFile"), c.CACertFile, "CA certificate file")
+		fs.StringVar(&c.CertFile, c.FlagNamer("TLS CertFile"), c.CertFile, "client certificate file")
+		fs.StringVar(&c.KeyFile, c.FlagNamer("TLS KeyFile"), c.KeyFile, "client key file")
+	}
+
 	fs.StringVarP(&c.RequestFile, c.FlagNamer("RequestFile"), "f", c.RequestFile, "client request file; use \"-\" for stdin")
 	fs.StringVarP(&c.RequestFormat, c.FlagNamer("RequestFormat"), "i", c.RequestFormat, "request format ("+strings.Join(c.decoderFormats(), ", ")+")")
 	fs.StringVarP(&c.ResponseFormat, c.FlagNamer("ResponseFormat"), "o", c.ResponseFormat, "response format ("+strings.Join(c.encoderFormats(), ", ")+")")
-	fs.DurationVar(&c.Timeout, c.FlagNamer("Timeout"), c.Timeout, "client connection timeout")
-	fs.BoolVar(&c.TLS, c.FlagNamer("TLS"), c.TLS, "enable TLS")
-	fs.StringVar(&c.ServerName, c.FlagNamer("TLS ServerName"), c.ServerName, "TLS server name override")
-	fs.BoolVar(&c.InsecureSkipVerify, c.FlagNamer("TLS InsecureSkipVerify"), c.InsecureSkipVerify, "INSECURE: skip TLS checks")
-	fs.StringVar(&c.CACertFile, c.FlagNamer("TLS CACertFile"), c.CACertFile, "CA certificate file")
-	fs.StringVar(&c.CertFile, c.FlagNamer("TLS CertFile"), c.CertFile, "client certificate file")
-	fs.StringVar(&c.KeyFile, c.FlagNamer("TLS KeyFile"), c.KeyFile, "client key file")
 
 	for _, binder := range c.flagBinders {
 		binder(fs, c.FlagNamer)
@@ -159,6 +164,10 @@ func RoundTrip(ctx context.Context, cfg *Config, fn func(grpc.ClientConnInterfac
 		return err
 	}
 
+	if cfg.ClientConn != nil {
+		return fn(cfg.ClientConn, in, out)
+	}
+
 	opts := []grpc.DialOption{grpc.WithBlock()}
 	if err := cfg.dialOpts(ctx, &opts); err != nil {
 		return err
@@ -177,7 +186,10 @@ func RoundTrip(ctx context.Context, cfg *Config, fn func(grpc.ClientConnInterfac
 		}
 		return err
 	}
-	defer cc.Close()
+	defer func() {
+		<-ctx.Done()
+		cc.Close()
+	}()
 
 	return fn(cc, in, out)
 }
