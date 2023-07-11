@@ -5,6 +5,7 @@ import (
 
 	"github.com/NathanBaulch/protoc-gen-cobra/iocodec"
 	"github.com/NathanBaulch/protoc-gen-cobra/naming"
+	"google.golang.org/grpc"
 )
 
 type Option func(*Config)
@@ -100,6 +101,12 @@ func WithInputDecoder(format string, maker iocodec.DecoderMaker) Option {
 		}
 		d[format] = maker
 		c.inDecoders = d
+	}
+}
+
+func WithClientConn(cc grpc.ClientConnInterface) Option {
+	return func(c *Config) {
+		c.ClientConn = cc
 	}
 }
 
