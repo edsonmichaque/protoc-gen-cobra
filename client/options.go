@@ -104,9 +104,9 @@ func WithInputDecoder(format string, maker iocodec.DecoderMaker) Option {
 	}
 }
 
-func WithClientConn(cc grpc.ClientConnInterface) Option {
+func WithClientConnFunc(f func() grpc.ClientConnInterface) Option {
 	return func(c *Config) {
-		c.ClientConn = cc
+		c.ClientConnFunc = f
 	}
 }
 

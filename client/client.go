@@ -27,7 +27,7 @@ type (
 )
 
 type Config struct {
-	ClientConn grpc.ClientConnInterface
+	ClientConnFunc func() grpc.ClientConnInterface
 
 	ServerAddr     string
 	RequestFile    string
@@ -111,7 +111,7 @@ func RegisterOutputEncoder(format string, maker iocodec.EncoderMaker) {
 }
 
 func (c *Config) BindFlags(fs *pflag.FlagSet) {
-	if c.ClientConn == nil {
+	if c.ClientConnFunc == nil {
 		fs.StringVarP(&c.ServerAddr, c.FlagNamer("ServerAddr"), "s", c.ServerAddr, "server address in the form host:port")
 		fs.DurationVar(&c.Timeout, c.FlagNamer("Timeout"), c.Timeout, "client connection timeout")
 		fs.BoolVar(&c.TLS, c.FlagNamer("TLS"), c.TLS, "enable TLS")
@@ -164,8 +164,8 @@ func RoundTrip(ctx context.Context, cfg *Config, fn func(grpc.ClientConnInterfac
 		return err
 	}
 
-	if cfg.ClientConn != nil {
-		return fn(cfg.ClientConn, in, out)
+	if cfg.ClientConnFunc != nil {
+		return fn(cfg.ClientConnFunc(), in, out)
 	}
 
 	opts := []grpc.DialOption{grpc.WithBlock()}
