@@ -3,10 +3,10 @@
 package oneof
 
 import (
-	client "github.com/NathanBaulch/protoc-gen-cobra/client"
-	flag "github.com/NathanBaulch/protoc-gen-cobra/flag"
-	iocodec "github.com/NathanBaulch/protoc-gen-cobra/iocodec"
-	common "github.com/NathanBaulch/protoc-gen-cobra/testdata/oneof/common"
+	client "github.com/edsonmichaque/protoc-gen-cobra/client"
+	flag "github.com/edsonmichaque/protoc-gen-cobra/flag"
+	iocodec "github.com/edsonmichaque/protoc-gen-cobra/iocodec"
+	common "github.com/edsonmichaque/protoc-gen-cobra/testdata/oneof/common"
 	cobra "github.com/spf13/cobra"
 	grpc "google.golang.org/grpc"
 	proto "google.golang.org/protobuf/proto"

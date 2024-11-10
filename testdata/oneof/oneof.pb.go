@@ -7,7 +7,7 @@
 package oneof
 
 import (
-	common "github.com/NathanBaulch/protoc-gen-cobra/testdata/oneof/common"
+	common "github.com/edsonmichaque/protoc-gen-cobra/testdata/oneof/common"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"

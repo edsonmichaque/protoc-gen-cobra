@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+
+package cobra;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/edsonmichaque/protoc-gen-cobra/proto/cobra/v1;cobrapb";
+
+// Define the extension for CLI options
+extend google.protobuf.ServiceOptions {
+  CommandOptions command = 50001;
+}
+
+extend google.protobuf.MethodOptions {
+  CommandOptions subcommand = 50002;
+}
+
+extend google.protobuf.FieldOptions {
+  FlagOptions flag = 50003;
+}
+
+
+// Define the structure of the Cobra CLI options
+message CommandOptions {
+  string name = 1;
+  string alias = 2;
+  string summary = 3;
+  string description = 4;
+  repeated string aliases = 5;
+}
+
+// Define the structure of a flag
+message FlagOptions {
+  string name = 1;
+  string description = 2;
+  string alias = 3;
+  string default = 4;
+}

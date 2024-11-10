@@ -6,7 +6,9 @@ import (
 	"strings"
 	"text/template"
 
+	cobrapb "github.com/edsonmichaque/protoc-gen-cobra/proto/cobra/v1"
 	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
@@ -37,9 +39,17 @@ func {{.GoName}}ClientCommand(options ...client.Option) *cobra.Command {
 	cfg := client.NewConfig(options...)
 	cmd := &cobra.Command{
 		Use: cfg.CommandNamer("{{.GoName}}"),
-		Short: "{{.GoName}} service client",
-		Long: {{.Comments.Leading | cleanComments | printf "%q"}},{{if .Desc.Options.GetDeprecated}}
-		Deprecated: "deprecated",{{end}}
+		{{- $short := short . .Comments -}}
+		{{- if ne $short "" }}
+		Short: {{$short | printf "%q"}},
+		{{ end -}}
+		{{- if .Desc.Options.GetDeprecated}}
+		Deprecated: "deprecated",
+		{{- end -}}
+		{{- $long := long . .Comments -}}
+		{{- if ne $long "" }}
+		Long: {{$long | printf "%q"}},
+		{{ end -}}
 	}
 	cfg.BindFlags(cmd.PersistentFlags())
 	cmd.AddCommand({{range .Methods}}
@@ -49,10 +59,16 @@ func {{.GoName}}ClientCommand(options ...client.Option) *cobra.Command {
 }
 `
 	serviceTemplate = template.Must(template.New("service").
-			Funcs(template.FuncMap{"cleanComments": cleanComments}).
-			Parse(serviceTemplateCode))
+			Funcs(template.FuncMap{
+			"cleanComments":    cleanComments,
+			"mainComments":     extractMainComment,
+			"trailingComments": extractTrailingComments,
+			"short":            extractCommandSummary,
+			"long":             extractCommandDescription,
+		}).
+		Parse(serviceTemplateCode))
 	serviceImports = []protogen.GoImportPath{
-		"github.com/NathanBaulch/protoc-gen-cobra/client",
+		"github.com/edsonmichaque/protoc-gen-cobra/client",
 		"github.com/spf13/cobra",
 	}
 )
@@ -80,10 +96,22 @@ func _{{.Parent.GoName}}{{.GoName}}Command(cfg *client.Config) *cobra.Command {
 	req := &{{.InputType}}{}
 
 	cmd := &cobra.Command{
-		Use: cfg.CommandNamer("{{.GoName}}"),
-		Short: "{{.GoName}} RPC client",
-		Long: {{.Comments.Leading | cleanComments | printf "%q"}},{{if .Desc.Options.GetDeprecated}}
-		Deprecated: "deprecated",{{end}}
+		Use: cfg.CommandNamer("{{if .Subcommand.Name}}{{.Subcommand.Name}}{{else}}{{.GoName}}{{end}}"),
+		{{- $short := short . .Comments -}}
+		{{- if ne $short "" }}
+		Short: {{$short | printf "%q"}},
+		{{ end -}}
+		{{if .Desc.Options.GetDeprecated}}
+		Deprecated: "deprecated",
+		{{end}}
+		{{- $long := long . .Comments -}}
+		{{- if ne $long "" }}
+		Long: {{$long | printf "%q"}},
+		{{ end -}}
+		{{- $aliases := aliases .Subcommand -}}
+		{{- if ne $aliases "" }}
+		Aliases: {{ $aliases }},
+		{{ end -}}
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cfg.UseEnvVars {
 				if err := flag.SetFlagsFromEnv(cmd.Parent().PersistentFlags(), true, cfg.EnvVarNamer, cfg.EnvVarPrefix, "{{.Parent.GoName}}"); err != nil {
@@ -161,12 +189,19 @@ func _{{.Parent.GoName}}{{.GoName}}Command(cfg *client.Config) *cobra.Command {
 }
 `
 	methodTemplate = template.Must(template.New("method").
-			Funcs(template.FuncMap{"cleanComments": cleanComments}).
-			Parse(methodTemplateCode))
+			Funcs(template.FuncMap{
+			"cleanComments":    cleanComments,
+			"mainComments":     extractMainComment,
+			"trailingComments": extractTrailingComments,
+			"short":            extractCommandSummary,
+			"long":             extractCommandDescription,
+			"aliases":          extractCommandAliases,
+		}).
+		Parse(methodTemplateCode))
 	methodImports = []protogen.GoImportPath{
-		"github.com/NathanBaulch/protoc-gen-cobra/client",
-		"github.com/NathanBaulch/protoc-gen-cobra/flag",
-		"github.com/NathanBaulch/protoc-gen-cobra/iocodec",
+		"github.com/edsonmichaque/protoc-gen-cobra/client",
+		"github.com/edsonmichaque/protoc-gen-cobra/flag",
+		"github.com/edsonmichaque/protoc-gen-cobra/iocodec",
 		"github.com/spf13/cobra",
 		"google.golang.org/grpc",
 		"google.golang.org/protobuf/proto",
@@ -182,11 +217,29 @@ func genMethod(g *protogen.GeneratedFile, method *protogen.Method) error {
 	}
 
 	code := walkMessage(g, method.Input, nil, nil, false, make(map[protogen.GoIdent]bool))
+
+	opts := method.Desc.Options()
+
+	var subcommand = &cobrapb.CommandOptions{}
+
+	methodOptions, ok := opts.(*descriptorpb.MethodOptions)
+	if !ok {
+		return fmt.Errorf("failed to convert options to MethodOptions")
+	}
+
+	// Check if the method options have the subcommand extension
+	if proto.HasExtension(methodOptions, cobrapb.E_Subcommand) {
+		ext := proto.GetExtension(methodOptions, cobrapb.E_Subcommand)
+		subcommand = ext.(*cobrapb.CommandOptions)
+	}
+
 	data := struct {
 		*protogen.Method
-		InputType string
-		InputCode string
-	}{method, g.QualifiedGoIdent(method.Input.GoIdent), strings.Join(code, "\n")}
+		Subcommand *cobrapb.CommandOptions
+		InputType  string
+		InputCode  string
+	}{method, subcommand, g.QualifiedGoIdent(method.Input.GoIdent), strings.Join(code, "\n")}
+
 	return methodTemplate.Execute(g, data)
 }
 
@@ -234,8 +287,21 @@ func walkField(g *protogen.GeneratedFile, fld *protogen.Field, path, postSetCode
 	if len(path) > 0 {
 		target = "_" + strings.Join(path, "_")
 	}
+
+	flag := &cobrapb.FlagOptions{}
+
+	if opts := extractFlagOptions(fld.Desc.Options()); opts != nil {
+		flag = opts
+	}
+
+	fieldName := fld.GoName
+	if flag.Name != "" {
+		fieldName = flag.Name
+	}
+
+	flagName := fmt.Sprintf("cfg.FlagNamer(%q)", strings.Join(append(path, fieldName), " "))
 	path = append(path, fld.GoName)
-	flagName := fmt.Sprintf("cfg.FlagNamer(%q)", strings.Join(path, " "))
+
 	varName := "_" + strings.Join(path, "_")
 	oneof := fld.Oneof != nil && !fld.Oneof.Desc.IsSynthetic()
 
@@ -382,4 +448,93 @@ func normalizeKind(kind protoreflect.Kind) protoreflect.Kind {
 
 func cleanComments(comments protogen.Comments) string {
 	return strings.TrimSpace(string(comments))
+}
+
+func extractMainComment(comments protogen.Comments) string {
+	cleaned := cleanComments(comments)
+
+	// Split the cleaned comments into lines
+	lines := strings.SplitN(cleaned, "\n", 2)
+
+	// Return the first line, trimmed of any leading or trailing whitespace
+	if len(lines) > 0 {
+		return strings.TrimSpace(lines[0])
+	}
+
+	// Return an empty string if no comments are present
+	return ""
+}
+
+func extractTrailingComments(comments protogen.Comments) string {
+	cleaned := cleanComments(comments)
+
+	lines := strings.Split(cleaned, "\n")
+	if len(lines) <= 1 {
+		return ""
+	}
+
+	return strings.TrimSpace(strings.Join(lines[1:], "\n"))
+}
+
+func extractCommandInfo(fld interface{}, comments protogen.CommentSet, extract func(*cobrapb.CommandOptions) string, fallback func(protogen.Comments) string) string {
+	var opts protoreflect.ProtoMessage
+
+	switch v := fld.(type) {
+	case *protogen.Method:
+		opts = v.Desc.Options()
+	case *protogen.Service:
+		opts = v.Desc.Options()
+	}
+
+	o := extractCommandOptions(opts)
+	if o != nil {
+		if result := extract(o); result != "" {
+			return result
+		}
+	}
+
+	return fallback(comments.Leading)
+}
+
+func extractCommandDescription(fld interface{}, comments protogen.CommentSet) string {
+	return extractCommandInfo(fld, comments, func(o *cobrapb.CommandOptions) string {
+		return o.Description
+	}, extractTrailingComments)
+}
+
+func extractCommandSummary(fld interface{}, comments protogen.CommentSet) string {
+	return extractCommandInfo(fld, comments, func(o *cobrapb.CommandOptions) string {
+		return o.Summary
+	}, extractMainComment)
+}
+
+func extractCommandOptions(desc protoreflect.ProtoMessage) *cobrapb.CommandOptions {
+	if proto.HasExtension(desc, cobrapb.E_Command) {
+		ext := proto.GetExtension(desc, cobrapb.E_Command)
+		return ext.(*cobrapb.CommandOptions)
+	}
+
+	return nil
+}
+
+func extractFlagOptions(desc protoreflect.ProtoMessage) *cobrapb.FlagOptions {
+	if proto.HasExtension(desc, cobrapb.E_Flag) {
+		ext := proto.GetExtension(desc, cobrapb.E_Flag)
+		return ext.(*cobrapb.FlagOptions)
+	}
+
+	return nil
+}
+
+func extractCommandAliases(opts *cobrapb.CommandOptions) string {
+	aliases := make([]string, 0)
+	for _, alias := range opts.Aliases {
+		aliases = append(aliases, fmt.Sprintf("\"%s\"", alias))
+	}
+
+	if len(aliases) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("[]string{%s}", strings.Join(aliases, ","))
 }

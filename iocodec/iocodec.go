@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/NathanBaulch/protoc-gen-cobra/ptypes"
+	"github.com/edsonmichaque/protoc-gen-cobra/ptypes"
 )
 
 var NoOp = func(interface{}) error { return nil }

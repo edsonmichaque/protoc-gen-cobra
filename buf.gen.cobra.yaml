@@ -1,0 +1,7 @@
+version: v1
+plugins:
+  - name: cobra
+    out: .
+    opt:
+      - paths=source_relative
+      - command_prefix=katembe

@@ -3,8 +3,8 @@ package client
 import (
 	"time"
 
-	"github.com/NathanBaulch/protoc-gen-cobra/iocodec"
-	"github.com/NathanBaulch/protoc-gen-cobra/naming"
+	"github.com/edsonmichaque/protoc-gen-cobra/iocodec"
+	"github.com/edsonmichaque/protoc-gen-cobra/naming"
 	"google.golang.org/grpc"
 )
 
