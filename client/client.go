@@ -29,13 +29,13 @@ type (
 type Config struct {
 	ClientConnFunc func() grpc.ClientConnInterface
 
-	ServerAddr     string
-	RequestFile    string
-	RequestFormat  string
-	ResponseFormat string
-	Timeout        time.Duration
-	UseEnvVars     bool
-	EnvVarPrefix   string
+	ServerAddr    string
+	File          string
+	RequestFormat string
+	Format        string
+	Timeout       time.Duration
+	UseEnvVars    bool
+	EnvVarPrefix  string
 
 	CommandNamer naming.Namer
 	FlagNamer    naming.Namer
@@ -55,11 +55,11 @@ type Config struct {
 }
 
 var DefaultConfig = &Config{
-	ServerAddr:     "localhost:8080",
-	RequestFormat:  "json",
-	ResponseFormat: "json",
-	Timeout:        10 * time.Second,
-	UseEnvVars:     true,
+	ServerAddr:    "localhost:8080",
+	RequestFormat: "json",
+	Format:        "json",
+	Timeout:       10 * time.Second,
+	UseEnvVars:    true,
 
 	CommandNamer: naming.LowerKebab,
 	FlagNamer:    naming.LowerKebab,
@@ -122,9 +122,9 @@ func (c *Config) BindFlags(fs *pflag.FlagSet) {
 		fs.StringVar(&c.KeyFile, c.FlagNamer("TLS KeyFile"), c.KeyFile, "client key file")
 	}
 
-	fs.StringVarP(&c.RequestFile, c.FlagNamer("RequestFile"), "f", c.RequestFile, "client request file; use \"-\" for stdin")
+	fs.StringVarP(&c.File, c.FlagNamer("File"), "f", c.File, "client request file; use \"-\" for stdin")
 	fs.StringVarP(&c.RequestFormat, c.FlagNamer("RequestFormat"), "i", c.RequestFormat, "request format ("+strings.Join(c.decoderFormats(), ", ")+")")
-	fs.StringVarP(&c.ResponseFormat, c.FlagNamer("ResponseFormat"), "o", c.ResponseFormat, "response format ("+strings.Join(c.encoderFormats(), ", ")+")")
+	fs.StringVarP(&c.Format, c.FlagNamer("Format"), "o", c.Format, "response format ("+strings.Join(c.encoderFormats(), ", ")+")")
 
 	for _, binder := range c.flagBinders {
 		binder(fs, c.FlagNamer)
@@ -195,16 +195,16 @@ func RoundTrip(ctx context.Context, cfg *Config, fn func(grpc.ClientConnInterfac
 }
 
 func (c *Config) makeDecoder() (iocodec.Decoder, error) {
-	if c.RequestFile == "" {
+	if c.File == "" {
 		return iocodec.NoOp, nil
 	}
-	if c.RequestFile != "-" {
-		f, err := os.Open(c.RequestFile)
+	if c.File != "-" {
+		f, err := os.Open(c.File)
 		if err != nil {
 			return nil, fmt.Errorf("request file: %v", err)
 		}
 		var m iocodec.DecoderMaker
-		if ext := strings.TrimLeft(filepath.Ext(c.RequestFile), "."); ext != "" {
+		if ext := strings.TrimLeft(filepath.Ext(c.File), "."); ext != "" {
 			m = c.inDecoders[ext]
 		}
 		if m == nil {
@@ -230,11 +230,11 @@ func (c *Config) makeDecoder() (iocodec.Decoder, error) {
 }
 
 func (c *Config) makeEncoder() (iocodec.Encoder, error) {
-	if c.ResponseFormat == "" {
+	if c.Format == "" {
 		return iocodec.NoOp, nil
 	}
-	if m, ok := c.outEncoders[c.ResponseFormat]; !ok {
-		return nil, fmt.Errorf("unknown response format: %s", c.ResponseFormat)
+	if m, ok := c.outEncoders[c.Format]; !ok {
+		return nil, fmt.Errorf("unknown response format: %s", c.Format)
 	} else {
 		return m(os.Stdout), nil
 	}

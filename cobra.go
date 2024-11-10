@@ -38,17 +38,21 @@ var (
 func {{.GoName}}ClientCommand(options ...client.Option) *cobra.Command {
 	cfg := client.NewConfig(options...)
 	cmd := &cobra.Command{
-		Use: cfg.CommandNamer("{{.GoName}}"),
+		Use: cfg.CommandNamer("{{if .Command.Name}}{{.Command.Name}}{{else}}{{.GoName}}{{end}}"),
 		{{- $short := short . .Comments -}}
 		{{- if ne $short "" }}
 		Short: {{$short | printf "%q"}},
 		{{ end -}}
-		{{- if .Desc.Options.GetDeprecated}}
+		{{if .Desc.Options.GetDeprecated}}
 		Deprecated: "deprecated",
-		{{- end -}}
+		{{end}}
 		{{- $long := long . .Comments -}}
 		{{- if ne $long "" }}
 		Long: {{$long | printf "%q"}},
+		{{ end -}}
+		{{- $aliases := aliases .Command -}}
+		{{- if ne $aliases "" }}
+		Aliases: {{ $aliases }},
 		{{ end -}}
 	}
 	cfg.BindFlags(cmd.PersistentFlags())
@@ -65,6 +69,7 @@ func {{.GoName}}ClientCommand(options ...client.Option) *cobra.Command {
 			"trailingComments": extractTrailingComments,
 			"short":            extractCommandSummary,
 			"long":             extractCommandDescription,
+			"aliases":          extractCommandAliases,
 		}).
 		Parse(serviceTemplateCode))
 	serviceImports = []protogen.GoImportPath{
@@ -77,7 +82,19 @@ func genService(g *protogen.GeneratedFile, service *protogen.Service) error {
 	for _, imp := range serviceImports {
 		g.QualifiedGoIdent(protogen.GoIdent{GoImportPath: imp})
 	}
-	if err := serviceTemplate.Execute(g, service); err != nil {
+
+	var opts = &cobrapb.CommandOptions{}
+
+	if opts = extractCommandOptions(service.Desc.Options()); opts == nil {
+		opts = &cobrapb.CommandOptions{}
+	}
+
+	data := struct {
+		*protogen.Service
+		Command *cobrapb.CommandOptions
+	}{service, opts}
+
+	if err := serviceTemplate.Execute(g, data); err != nil {
 		return err
 	}
 

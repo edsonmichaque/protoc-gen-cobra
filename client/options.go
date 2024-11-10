@@ -24,7 +24,7 @@ func WithRequestFormat(format string) Option {
 
 func WithResponseFormat(format string) Option {
 	return func(c *Config) {
-		c.ResponseFormat = format
+		c.Format = format
 	}
 }
 
