@@ -18,13 +18,13 @@ func WithServerAddr(addr string) Option {
 
 func WithRequestFormat(format string) Option {
 	return func(c *Config) {
-		c.RequestFormat = format
+		c.Input = format
 	}
 }
 
 func WithResponseFormat(format string) Option {
 	return func(c *Config) {
-		c.Format = format
+		c.Output = format
 	}
 }
 
@@ -118,5 +118,11 @@ func WithOutputEncoder(format string, maker iocodec.EncoderMaker) Option {
 		}
 		e[format] = maker
 		c.outEncoders = e
+	}
+}
+
+func WithEnvMapping(mapping map[string]string) Option {
+	return func(c *Config) {
+		c.EnvMapping = mapping
 	}
 }
