@@ -12,7 +12,7 @@ type Option func(*Config)
 
 func WithServerAddr(addr string) Option {
 	return func(c *Config) {
-		c.ServerAddr = addr
+		c.BaseURL = addr
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -30,7 +29,7 @@ type (
 type Config struct {
 	ClientConnFunc func() grpc.ClientConnInterface
 
-	ServerAddr   string
+	BaseURL      string
 	File         string
 	Input        string
 	Output       string
@@ -58,7 +57,7 @@ type Config struct {
 }
 
 var DefaultConfig = &Config{
-	ServerAddr: "localhost:8080",
+	BaseURL:    "localhost:8080",
 	Input:      "json",
 	Output:     "json",
 	Timeout:    10 * time.Second,
@@ -115,17 +114,14 @@ func RegisterOutputEncoder(format string, maker iocodec.EncoderMaker) {
 
 func (c *Config) BindFlags(fs *pflag.FlagSet) {
 	if c.ClientConnFunc == nil {
-		fs.StringVarP(&c.ServerAddr, c.FlagNamer("ServerAddr"), "s", c.ServerAddr, "server address in the form host:port")
+		fs.StringVarP(&c.BaseURL, c.FlagNamer("BaseURL"), "s", c.BaseURL, "server address in the form host:port")
 		fs.DurationVar(&c.Timeout, c.FlagNamer("Timeout"), c.Timeout, "client connection timeout")
-		fs.BoolVar(&c.TLS, c.FlagNamer("TLS"), c.TLS, "enable TLS")
 		fs.StringVar(&c.ServerName, c.FlagNamer("TLS ServerName"), c.ServerName, "TLS server name override")
 		fs.BoolVar(&c.InsecureSkipVerify, c.FlagNamer("TLS InsecureSkipVerify"), c.InsecureSkipVerify, "INSECURE: skip TLS checks")
 		fs.StringVar(&c.CACertFile, c.FlagNamer("TLS CACertFile"), c.CACertFile, "CA certificate file")
 		fs.StringVar(&c.CertFile, c.FlagNamer("TLS CertFile"), c.CertFile, "client certificate file")
 		fs.StringVar(&c.KeyFile, c.FlagNamer("TLS KeyFile"), c.KeyFile, "client key file")
 	}
-
-	log.Println("binding flags")
 
 	fs.StringVarP(&c.File, c.FlagNamer("FromFile"), "f", c.File, "client request file; use \"-\" for stdin")
 	fs.StringVarP(&c.Input, c.FlagNamer("Input"), "i", c.Input, "request format ("+strings.Join(c.decoderFormats(), ", ")+")")
@@ -184,10 +180,10 @@ func RoundTrip(ctx context.Context, cfg *Config, fn func(grpc.ClientConnInterfac
 		defer done()
 	}
 
-	cc, err := grpc.DialContext(ctx, cfg.ServerAddr, opts...)
+	cc, err := grpc.DialContext(ctx, cfg.BaseURL, opts...)
 	if err != nil {
 		if err == context.DeadlineExceeded {
-			return fmt.Errorf("timeout dialing server: %s", cfg.ServerAddr)
+			return fmt.Errorf("timeout dialing server: %s", cfg.BaseURL)
 		}
 		return err
 	}
@@ -270,7 +266,7 @@ func (c *Config) dialOpts(ctx context.Context, opts *[]grpc.DialOption) error {
 		if c.ServerName != "" {
 			tlsConfig.ServerName = c.ServerName
 		} else {
-			addr, _, _ := net.SplitHostPort(c.ServerAddr)
+			addr, _, _ := net.SplitHostPort(c.BaseURL)
 			tlsConfig.ServerName = addr
 		}
 		cred := credentials.NewTLS(tlsConfig)
